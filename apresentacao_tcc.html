@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCC — M-Reader OCR Híbrido · 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy:  #0b1830; --navy2: #142444; --navy3: #1d3566;
+  --gold:  #b87c22; --gold2: #d4983a; --gold3: #f0be60;
+  --cream: #f7f5ef; --paper: #fdfcf9;
+  --text:  #1a1828; --text2: #4a4860; --text3: #888;
+  --white: #fff;    --green: #1f8c4e; --steel: #7a96b8;
+  --red:   #c0392b;
+}
+html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-family:'Crimson Pro',Georgia,serif; }
+
+/* ── Stage / Scale ── */
+.stage { position:fixed; inset:0 0 52px 0; display:flex; align-items:center; justify-content:center; }
+.scaler { transform-origin:center center; will-change:transform; }
+.viewport { width:960px; height:540px; position:relative; overflow:hidden;
+  box-shadow:0 32px 80px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.06); }
+
+/* ── Slides ── */
+.slide { position:absolute; inset:0; opacity:0; pointer-events:none; transform:translateY(16px);
+  transition:opacity .42s ease, transform .42s ease; }
+.slide.active { opacity:1; pointer-events:all; transform:translateY(0); }
+.slide.out    { opacity:0; transform:translateY(-16px); }
+
+/* ── Controls ── */
+.controls { position:fixed; bottom:0; left:0; right:0; height:52px;
+  background:rgba(5,9,15,.97); border-top:1px solid rgba(255,255,255,.07);
+  display:flex; align-items:center; gap:14px; padding:0 20px; z-index:200; }
+.btn { width:34px; height:34px; border-radius:7px; border:1px solid rgba(255,255,255,.13);
+  background:rgba(255,255,255,.06); color:rgba(255,255,255,.65); font-size:16px;
+  cursor:pointer; display:flex; align-items:center; justify-content:center;
+  transition:all .18s; flex-shrink:0; }
+.btn:hover { background:rgba(255,255,255,.14); color:#fff; }
+.btn:disabled { opacity:.22; cursor:default; }
+.prog-track { flex:1; height:3px; background:rgba(255,255,255,.1); border-radius:2px; overflow:hidden; }
+.prog-fill { height:100%; background:linear-gradient(90deg,var(--gold),var(--gold3)); border-radius:2px; transition:width .4s ease; }
+.ctr { font-family:'JetBrains Mono',monospace; font-size:11px; color:rgba(255,255,255,.4); letter-spacing:.08em; min-width:48px; text-align:center; }
+.hint { font-family:'JetBrains Mono',monospace; font-size:9px; color:rgba(255,255,255,.2); letter-spacing:.1em; white-space:nowrap; }
+
+/* ── Shared Header ── */
+.sh { height:62px; background:var(--navy); display:flex; align-items:center; gap:12px; padding:0 38px; flex-shrink:0; position:relative; }
+.sh::after { content:''; position:absolute; bottom:0; left:38px; right:38px; height:1px; background:rgba(255,255,255,.07); }
+.sh-num { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--gold3); letter-spacing:.18em; opacity:.85; }
+.sh-sep { width:1px; height:18px; background:rgba(255,255,255,.14); }
+.sh-title { font-family:'Playfair Display',serif; font-size:16px; font-weight:600; color:var(--white); letter-spacing:.015em; }
+.sh-tag { margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.18em; text-transform:uppercase; color:rgba(255,255,255,.28); }
+
+/* ── Slide Body ── */
+.sb { flex:1; padding:22px 38px 20px; display:flex; flex-direction:column; gap:12px; background:var(--cream); overflow:hidden; }
+
+/* ── Cards ── */
+.g3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.g2 { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+.g4 { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.card { background:var(--paper); border:1px solid #e4dfd5; border-radius:9px; padding:16px 16px 14px; position:relative; overflow:hidden; }
+.card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,var(--gold),var(--gold2)); }
+.card.b-navy::before { background:linear-gradient(90deg,var(--navy2),var(--navy3)); }
+.card.b-green::before { background:linear-gradient(90deg,#1f8c4e,#27ae60); }
+.card.b-steel::before { background:linear-gradient(90deg,#4a7aa8,#7a96b8); }
+.card.b-red::before { background:linear-gradient(90deg,#a93226,#c0392b); }
+.c-icon { font-size:19px; margin-bottom:7px; }
+.c-title { font-family:'Playfair Display',serif; font-size:12.5px; font-weight:700; color:var(--navy); margin-bottom:5px; line-height:1.2; }
+.c-body { font-size:12px; color:var(--text2); line-height:1.5; }
+
+/* ── SLIDE 1 – CAPA ── */
+.s1 { background:var(--navy); display:flex; flex-direction:column; }
+.s1-bg { position:absolute; inset:0; overflow:hidden; }
+.s1-bg::before { content:''; position:absolute; inset:0;
+  background: radial-gradient(ellipse 90% 55% at 50% 115%,rgba(180,120,34,.14) 0%,transparent 65%),
+              radial-gradient(ellipse 60% 40% at 85% 15%,rgba(29,53,102,.5) 0%,transparent 55%); }
+.s1-grid { position:absolute; inset:0;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:48px 48px; }
+.s1-top  { position:absolute; top:0; left:0; right:0; height:4px;
+  background:linear-gradient(90deg,transparent 5%,var(--gold),var(--gold3) 50%,var(--gold),transparent 95%); }
+.s1-line { position:absolute; bottom:78px; left:72px; right:72px; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(212,152,58,.3),transparent); }
+.s1-content { position:relative; z-index:2; flex:1; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; padding:28px 60px; text-align:center; }
+.s1-inst { font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:rgba(255,255,255,.35); margin-bottom:4px; }
+.s1-badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.25em;
+  text-transform:uppercase; color:var(--gold2); border:1px solid rgba(212,152,58,.3);
+  padding:5px 14px; border-radius:2px; margin-bottom:22px; }
+.s1-title { font-family:'Playfair Display',serif; font-size:24px; font-weight:700;
+  color:var(--white); line-height:1.3; letter-spacing:.01em; margin-bottom:12px; max-width:760px; }
+.s1-sub { font-family:'Crimson Pro',serif; font-size:15px; font-style:italic;
+  color:rgba(255,255,255,.5); margin-bottom:26px; max-width:580px; line-height:1.5; }
+.s1-meta { display:flex; gap:0; align-items:stretch; border:1px solid rgba(255,255,255,.1); border-radius:6px; overflow:hidden; }
+.s1-meta-item { padding:9px 18px; display:flex; flex-direction:column; gap:2px;
+  border-right:1px solid rgba(255,255,255,.1); }
+.s1-meta-item:last-child { border-right:none; }
+.s1-mk { font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:.18em;
+  text-transform:uppercase; color:rgba(255,255,255,.3); }
+.s1-mv { font-family:'Crimson Pro',serif; font-size:13px; color:rgba(255,255,255,.72); font-weight:600; }
+
+/* ── Problema ── */
+.prob-box { background:var(--navy); border-radius:10px; padding:18px 26px; position:relative; overflow:hidden; flex-shrink:0; }
+.prob-box-deco { position:absolute; right:18px; top:50%; transform:translateY(-50%);
+  font-family:'Playfair Display',serif; font-size:86px; font-weight:900;
+  color:rgba(255,255,255,.03); line-height:1; user-select:none; }
+.prob-label { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.28em;
+  text-transform:uppercase; color:var(--gold3); margin-bottom:7px; }
+.prob-stmt { font-family:'Playfair Display',serif; font-size:14.5px; font-style:italic;
+  color:var(--white); line-height:1.5; position:relative; z-index:2; }
+
+.issue-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.issue { display:flex; gap:10px; align-items:flex-start; background:var(--paper);
+  border:1px solid #e4dfd5; border-left:3px solid var(--gold2); border-radius:0 7px 7px 0;
+  padding:10px 12px; }
+.issue-icon { font-size:15px; flex-shrink:0; margin-top:1px; }
+.issue-text { font-size:12.5px; color:var(--text2); line-height:1.45; }
+.issue-text strong { color:var(--navy); }
+
+/* ── Hipótese ── */
+.hyp-box { background:linear-gradient(135deg,var(--navy) 0%,var(--navy3) 100%);
+  border-radius:10px; padding:18px 24px; border-left:4px solid var(--gold2); }
+.hyp-label, .obj-label { font-family:'JetBrains Mono',monospace; font-size:9px;
+  letter-spacing:.28em; text-transform:uppercase; margin-bottom:8px; }
+.hyp-label { color:var(--gold3); }
+.obj-label { color:var(--navy3); }
+.hyp-text { font-family:'Crimson Pro',serif; font-size:14px; font-style:italic;
+  color:var(--white); line-height:1.58; }
+.hyp-text em { color:var(--gold3); font-style:normal; font-weight:600; }
+.obj-box { background:var(--paper); border:1px solid #e4dfd5; border-radius:10px; padding:16px 22px; flex:1; }
+.obj-text { font-family:'Crimson Pro',serif; font-size:14px; color:var(--text); line-height:1.58; }
+
+/* ── Objetivos ── */
+.obj-list { display:flex; flex-direction:column; gap:8px; }
+.obj-item { display:flex; align-items:flex-start; gap:12px; background:var(--paper);
+  border:1px solid #e4dfd5; border-radius:8px; padding:9px 14px; }
+.obj-num { font-family:'Playfair Display',serif; font-size:16px; font-weight:700;
+  color:var(--gold); line-height:1.15; min-width:18px; }
+.obj-body { font-size:13px; color:var(--text2); line-height:1.42; }
+.obj-body strong { color:var(--navy); }
+
+/* ── Metodologia ── */
+.mcard { background:var(--paper); border:1px solid #e4dfd5; border-radius:9px; padding:15px 16px; }
+.mcard.top-gold  { border-top:3px solid var(--gold2); }
+.mcard.top-navy  { border-top:3px solid var(--navy3); }
+.mcard.top-green { border-top:3px solid var(--green); }
+.mcard.top-steel { border-top:3px solid var(--steel); }
+.mc-label { font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--text3); margin-bottom:5px; }
+.mc-title { font-family:'Playfair Display',serif; font-size:12.5px; font-weight:700;
+  color:var(--navy); margin-bottom:5px; }
+.mc-body { font-size:11.5px; color:var(--text2); line-height:1.52; }
+.mc-body strong { color:var(--navy); }
+
+/* ── Charts ── */
+.chart-label { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em;
+  color:var(--text3); text-transform:uppercase; margin-bottom:10px; }
+.bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.bar-method { font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--text2);
+  min-width:86px; text-align:right; letter-spacing:.02em; }
+.bar-track { flex:1; height:26px; background:#ede9e0; border-radius:4px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:4px; display:flex; align-items:center; padding-left:8px;
+  width:var(--bw,0%); transition:width .9s cubic-bezier(.4,0,.2,1) .25s; }
+.bar-fill.f-steel  { background:linear-gradient(90deg,#5a7ea8,#8aafd0); }
+.bar-fill.f-simple { background:linear-gradient(90deg,#6a8ea8,#9abfe0); }
+.bar-fill.f-adv    { background:linear-gradient(90deg,#7a8898,#a0b0c0); }
+.bar-fill.f-enh    { background:linear-gradient(90deg,var(--red),#e74c3c); }
+.bar-fill.f-gold   { background:linear-gradient(90deg,var(--gold),var(--gold2)); }
+.bar-fill.f-green  { background:linear-gradient(90deg,#1a7a44,#27ae6b); }
+.bar-val { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600; color:var(--white); white-space:nowrap; }
+.bar-delta { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; color:var(--green); min-width:78px; letter-spacing:.02em; }
+.bar-delta.neg { color:var(--red); }
+.bar-delta.neutral { color:var(--text3); }
+
+.stat-row { display:flex; gap:10px; }
+.stat-box { flex:1; background:var(--paper); border:1px solid #e4dfd5; border-radius:9px; padding:12px 12px; text-align:center; }
+.stat-val { font-family:'Playfair Display',serif; font-size:20px; font-weight:700; color:var(--navy); line-height:1; margin-bottom:4px; }
+.stat-val.gold  { color:var(--gold); }
+.stat-val.green { color:var(--green); }
+.stat-desc { font-size:10.5px; color:var(--text3); line-height:1.35; }
+
+.sig-bar { background:var(--navy); border-radius:9px; padding:13px 18px; display:flex; align-items:stretch; }
+.sig-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:0 10px;
+  border-right:1px solid rgba(255,255,255,.08); }
+.sig-item:last-child { border-right:none; }
+.sig-val { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; color:var(--gold3); }
+.sig-val.sm { font-size:12px; }
+.sig-desc { font-size:10px; color:rgba(255,255,255,.45); text-align:center; line-height:1.3; }
+
+/* ── SLIDE 10 ── */
+.s10 { background:var(--navy); display:flex; flex-direction:column; }
+.s10::before { content:''; position:absolute; inset:0;
+  background:radial-gradient(ellipse 80% 50% at 50% 110%,rgba(180,120,34,.12) 0%,transparent 55%); }
+.s10-content { position:relative; z-index:2; display:flex; flex-direction:column; height:100%; padding:24px 38px 22px; }
+.s10-title { font-family:'Playfair Display',serif; font-size:21px; font-weight:700; color:var(--white); }
+.s10-rule { width:42px; height:3px; background:var(--gold2); margin-top:9px; margin-bottom:14px; }
+.confirm { background:rgba(180,120,34,.14); border:1px solid rgba(212,152,58,.3);
+  border-radius:9px; padding:11px 18px; margin-bottom:14px; display:flex; align-items:center; gap:10px; }
+.confirm-icon { font-size:18px; }
+.confirm-text { font-family:'Crimson Pro',serif; font-size:13.5px; color:var(--gold3); font-style:italic; line-height:1.45; }
+.confirm-text strong { font-style:normal; font-weight:600; }
+.s10-cols { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; flex:1; }
+.s10-col-title { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.2em;
+  text-transform:uppercase; color:var(--gold3); margin-bottom:10px; padding-bottom:7px;
+  border-bottom:1px solid rgba(255,255,255,.09); }
+.s10-item { display:flex; gap:8px; align-items:flex-start; margin-bottom:8px; }
+.s10-dot { width:5px; height:5px; background:var(--gold2); border-radius:50%; flex-shrink:0; margin-top:5px; }
+.s10-text { font-size:12px; color:rgba(255,255,255,.62); line-height:1.48; }
+
+/* ── Tabela de métodos ── */
+.method-table { width:100%; border-collapse:collapse; font-size:11.5px; }
+.method-table th { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.15em;
+  text-transform:uppercase; color:var(--text3); padding:6px 10px; text-align:left;
+  border-bottom:2px solid #d8d2c6; }
+.method-table td { padding:7px 10px; border-bottom:1px solid #eae6de; color:var(--text2); }
+.method-table tr.best td { background:rgba(212,152,58,.08); font-weight:600; color:var(--navy); }
+.method-table tr.worst td { background:rgba(192,57,43,.05); color:#a93226; }
+.method-table .mono { font-family:'JetBrains Mono',monospace; font-size:10.5px; }
+.badge-best  { background:rgba(212,152,58,.18); color:#8b5e10; font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.1em; padding:2px 6px; border-radius:3px; }
+.badge-worst { background:rgba(192,57,43,.15); color:#a93226; font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.1em; padding:2px 6px; border-radius:3px; }
+.badge-base  { background:rgba(74,122,168,.15); color:#2a5a8a; font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.1em; padding:2px 6px; border-radius:3px; }
+
+/* ── Exemplo qualitativo ── */
+.exemplo-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.exemplo-box { background:var(--paper); border:1px solid #e4dfd5; border-radius:8px; padding:12px 14px; }
+.exemplo-label { font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--text3); margin-bottom:6px; }
+.exemplo-text { font-size:12.5px; color:var(--text2); line-height:1.55; font-style:italic; }
+.exemplo-text.bad { color:#a93226; }
+.exemplo-text.good { color:var(--green); }
+</style>
+</head>
+<body>
+
+<div class="stage">
+ <div class="scaler" id="scaler">
+  <div class="viewport" id="vp">
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 1 — CAPA
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide s1 active" id="slide-0">
+    <div class="s1-bg"><div class="s1-grid"></div><div class="s1-top"></div><div class="s1-line"></div></div>
+    <div class="s1-content">
+      <div class="s1-inst">Ministério da Educação · SETEC · IF Baiano — Campus Catu</div>
+      <div class="s1-badge">Curso Tecnólogo em Análise e Desenvolvimento de Sistemas · TCC · 2026</div>
+      <h1 class="s1-title">Evolução do M-Reader para Arquitetura<br>Cliente-Servidor com OCR Híbrido</h1>
+      <p class="s1-sub">Análise de Acurácia e Desempenho em Tecnologia Assistiva</p>
+      <div class="s1-meta">
+        <div class="s1-meta-item">
+          <span class="s1-mk">Autor</span>
+          <span class="s1-mv">Gustavo Jesus da Silva Costa</span>
+        </div>
+        <div class="s1-meta-item">
+          <span class="s1-mk">Orientador</span>
+          <span class="s1-mv">Prof. André Luiz Andrade Rezende</span>
+        </div>
+        <div class="s1-meta-item">
+          <span class="s1-mk">Ano</span>
+          <span class="s1-mv">2026</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 2 — REFERENCIAL TEÓRICO I
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-1" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">02</span><div class="sh-sep"></div>
+      <span class="sh-title">Referencial Teórico</span>
+      <span class="sh-tag">Parte I — Contexto &amp; Conceitos</span>
+    </div>
+    <div class="sb">
+      <div class="g3">
+        <div class="card">
+          <div class="c-icon">🦯</div>
+          <div class="c-title">Tecnologias Assistivas</div>
+          <div class="c-body">Recursos e estratégias que ampliam funcionalidade e autonomia de pessoas com deficiência. No Brasil, <strong>7,9 milhões</strong> têm dificuldade visual (IBGE, 2025). Lei 13.146/2015 garante acessibilidade como direito fundamental. WHO (2019) reforça efetividade em cenários reais.</div>
+        </div>
+        <div class="card b-navy">
+          <div class="c-icon">🖥️</div>
+          <div class="c-title">Sistema M-Reader</div>
+          <div class="c-body">App assistivo de baixo custo para leitura de documentos impressos (cardápios, livros) via câmera. Plataforma cliente: <strong>Raspberry Pi</strong> com wxPython. Transição arquitetural: de processamento local para <strong>cliente-servidor</strong> com servidor Flask remoto.</div>
+        </div>
+        <div class="card b-steel">
+          <div class="c-icon">🔍</div>
+          <div class="c-title">OCR — Reconhecimento Óptico</div>
+          <div class="c-body">Técnicas que convertem imagens com texto em dados processáveis. Evolução: regras → modelos estatísticos → redes neurais e multimodais (SUBRAMANI et al., 2021). Desafios em cardápios: fontes ornamentais, iluminação irregular, ângulo e foco.</div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="card" style="padding:13px 16px;">
+          <div class="c-title" style="font-size:12px;margin-bottom:5px;">📐 Métricas: CER, WER e Average Accuracy</div>
+          <div class="c-body" style="font-size:11.5px;"><strong>CER</strong> = distância Levenshtein / |referência| (nível de caractere). <strong>WER</strong> = análogo por palavras. <strong>Average Accuracy</strong> = (CA + WA + Exact Match) / 3 — métrica agregada adotada neste trabalho. Exact Match tende a zero em imagens reais, limitando o teto prático a ~66%.</div>
+        </div>
+        <div class="card b-green" style="padding:13px 16px;">
+          <div class="c-title" style="font-size:12px;margin-bottom:5px;">🏗️ Arquitetura Cliente-Servidor (REST)</div>
+          <div class="c-body" style="font-size:11.5px;">Estilo REST (FIELDING, 2000): interface uniforme, stateless, separação cliente/servidor. Implementado com <strong>Flask</strong> (microframework Python). Permite atualizar o motor OCR no servidor sem alterar o cliente Raspberry Pi. Princípios de modularidade segundo SOMMERVILLE (2019).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 3 — REFERENCIAL TEÓRICO II
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-2" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">03</span><div class="sh-sep"></div>
+      <span class="sh-title">Referencial Teórico</span>
+      <span class="sh-tag">Parte II — Tecnologias OCR &amp; Correlatos</span>
+    </div>
+    <div class="sb">
+      <div class="g2">
+        <div class="card">
+          <div class="c-icon">🔧</div>
+          <div class="c-title">Tesseract OCR (Google)</div>
+          <div class="c-body">Motor open-source baseado em rede <strong>LSTM</strong> (versão 4+). Parâmetros-chave: <strong>OEM 3</strong> (automático legado+LSTM), <strong>PSM 3</strong> (segmentação automática de página). Maduro e de baixo custo, mas sensível a ruído, baixa resolução e fontes não convencionais (SMITH, 2007).</div>
+        </div>
+        <div class="card b-navy">
+          <div class="c-icon">🤖</div>
+          <div class="c-title">OpenAI Vision — gpt-4.1-mini</div>
+          <div class="c-body">Modelo multimodal via API OpenAI (OPENAI, 2026). Interpreta a imagem como um todo, contornando fragilidades da segmentação clássica do Tesseract. Utilizado como <strong>fallback</strong> seletivo quando o quality_score ≤ 0,55. Modo <em>batch</em> no benchmark.</div>
+        </div>
+        <div class="card b-green">
+          <div class="c-icon">🧠</div>
+          <div class="c-title">IA em Document AI</div>
+          <div class="c-body"><strong>TrOCR</strong> (LI et al., 2021): OCR com Transformer pré-treinado. <strong>LayoutLMv3</strong> (HUANG et al., 2022): compreensão documental multimodal. <strong>olmOCR</strong> (POZNANSKI et al., 2025): VLMs em larga escala, &gt;90% em PDFs digitais. Avanço recente de abordagens neurais para entradas heterogêneas.</div>
+        </div>
+        <div class="card b-steel">
+          <div class="c-icon">📚</div>
+          <div class="c-title">Trabalhos Correlatos — Lacunas</div>
+          <div class="c-body">NEUDECKER et al. (2021): base para comparação justa com métricas claras. TRIYONO et al. (2023): poucos estudos assistivos com métricas reais. <strong>Lacuna identificada:</strong> escassez de estudos que quantifiquem acurácia <em>e</em> custo temporal em OCR híbrido assistivo de baixo custo.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 4 — PROBLEMA
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-3" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">04</span><div class="sh-sep"></div>
+      <span class="sh-title">Problema</span>
+      <span class="sh-tag">Questão de Pesquisa</span>
+    </div>
+    <div class="sb">
+      <div class="prob-box">
+        <div class="prob-box-deco">?</div>
+        <div class="prob-label">Questão de Pesquisa</div>
+        <p class="prob-stmt">"É possível melhorar a qualidade de transcrição do M-Reader, em cenário real de uso assistivo, por meio de uma arquitetura cliente-servidor com OCR híbrido e retorno alternativo multimodal, mantendo viabilidade operacional?"</p>
+      </div>
+      <div class="issue-grid">
+        <div class="issue">
+          <span class="issue-icon">🏗️</span>
+          <div class="issue-text"><strong>Arquitetura monolítica:</strong> processamento OCR concentrado no Raspberry Pi — qualquer atualização do motor exigia novo firmware do dispositivo.</div>
+        </div>
+        <div class="issue">
+          <span class="issue-icon">📉</span>
+          <div class="issue-text"><strong>Acurácia limitada:</strong> Tesseract local (método <em>old</em>) atingia apenas <strong>57,65%</strong> de average accuracy em imagens reais de cardápios.</div>
+        </div>
+        <div class="issue">
+          <span class="issue-icon">💡</span>
+          <div class="issue-text"><strong>Condições adversas:</strong> iluminação irregular, perspectiva, fontes decorativas e baixa resolução degradam severamente o resultado OCR clássico.</div>
+        </div>
+        <div class="issue">
+          <span class="issue-icon">🔒</span>
+          <div class="issue-text"><strong>Sem fallback:</strong> transcrição incorreta entregue ao usuário sem mecanismo de recuperação — impacto direto na acessibilidade.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 5 — HIPÓTESE & OBJETIVO GERAL
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-4" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">05</span><div class="sh-sep"></div>
+      <span class="sh-title">Hipótese &amp; Objetivo Geral</span>
+      <span class="sh-tag">Direcionamento da Pesquisa</span>
+    </div>
+    <div class="sb">
+      <div class="hyp-box">
+        <div class="hyp-label">Hipótese H₁</div>
+        <p class="hyp-text">A arquitetura cliente-servidor, associada à estratégia híbrida de OCR com retorno alternativo (<em>fallback</em>) para transcrição multimodal, viabiliza <em>ganho de acurácia superior a 3 p.p.</em> em relação ao Tesseract tradicional — sobretudo em imagens de maior complexidade visual — mantendo <em>latência adicional inferior a 15 segundos</em> por imagem.</p>
+      </div>
+      <div class="obj-box" style="display:flex;flex-direction:column;justify-content:center;">
+        <div class="obj-label">Objetivo Geral</div>
+        <p class="obj-text">Avaliar a evolução do M-Reader para uma arquitetura cliente-servidor com OCR híbrido e retorno alternativo (<em>fallback</em>) orientado por qualidade, <strong>mensurando seus impactos sobre a acurácia da transcrição e o tempo de processamento</strong> em contexto de tecnologia assistiva.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-shrink:0;">
+        <div style="flex:1;background:var(--paper);border:1px solid #e4dfd5;border-radius:8px;padding:11px 14px;text-align:center;">
+          <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--navy);">&gt; 3 p.p.</div>
+          <div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Limiar de ganho<br>de acurácia</div>
+        </div>
+        <div style="flex:1;background:var(--paper);border:1px solid #e4dfd5;border-radius:8px;padding:11px 14px;text-align:center;">
+          <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--gold);">&lt; 15 s</div>
+          <div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Limiar de latência<br>adicional</div>
+        </div>
+        <div style="flex:1;background:var(--paper);border:1px solid #e4dfd5;border-radius:8px;padding:11px 14px;text-align:center;">
+          <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--navy3);">222</div>
+          <div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Imagens de<br>teste</div>
+        </div>
+        <div style="flex:1;background:var(--paper);border:1px solid #e4dfd5;border-radius:8px;padding:11px 14px;text-align:center;">
+          <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--navy3);">5</div>
+          <div style="font-size:10.5px;color:var(--text3);margin-top:2px;">Estágios do<br>pipeline</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 6 — OBJETIVOS ESPECÍFICOS
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-5" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">06</span><div class="sh-sep"></div>
+      <span class="sh-title">Objetivos Específicos</span>
+      <span class="sh-tag">6 Objetivos</span>
+    </div>
+    <div class="sb" style="gap:8px;">
+      <ul class="obj-list">
+        <li class="obj-item">
+          <span class="obj-num">1</span>
+          <div class="obj-body"><strong>Descrever a transição arquitetural</strong> do M-Reader de processamento local (Raspberry Pi) para arranjo cliente-servidor com API REST em Flask.</div>
+        </li>
+        <li class="obj-item">
+          <span class="obj-num">2</span>
+          <div class="obj-body"><strong>Caracterizar o fluxo operacional atual</strong> com seleção de provedores OCR (<em>provider=auto</em>) e acionamento de retorno alternativo por qualidade (<em>quality_score</em>).</div>
+        </li>
+        <li class="obj-item">
+          <span class="obj-num">3</span>
+          <div class="obj-body"><strong>Consolidar os resultados de benchmark</strong> por estágio de processamento: <em>old, simple, advanced, enhanced</em> e <em>openai</em> — sobre a mesma base de 222 imagens.</div>
+        </li>
+        <li class="obj-item">
+          <span class="obj-num">4</span>
+          <div class="obj-body"><strong>Quantificar o ganho absoluto e relativo de acurácia</strong> do estágio multimodal (gpt-4.1-mini) em comparação ao baseline (<em>old</em>), na análise pareada de 206 imagens.</div>
+        </li>
+        <li class="obj-item">
+          <span class="obj-num">5</span>
+          <div class="obj-body"><strong>Analisar o custo temporal</strong> associado ao acionamento do retorno alternativo remoto — diferença média entre os métodos <em>openai</em> e <em>old</em> no protocolo de benchmark.</div>
+        </li>
+        <li class="obj-item">
+          <span class="obj-num">6</span>
+          <div class="obj-body"><strong>Discutir limitações técnicas e metodológicas</strong> da avaliação, indicando direções para continuidade do projeto M-Reader.</div>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 7 — METODOLOGIA
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-6" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">07</span><div class="sh-sep"></div>
+      <span class="sh-title">Metodologia</span>
+      <span class="sh-tag">Pesquisa Aplicada · Quantitativa · Comparativa</span>
+    </div>
+    <div class="sb">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="mcard top-gold">
+          <div class="mc-label">Tipo de Pesquisa</div>
+          <div class="mc-title">Aplicada · Quantitativa · Medidas Repetidas</div>
+          <div class="mc-body">Delineamento comparativo: cada imagem é submetida a todos os métodos (WAZLAWICK, 2014; GIL, 2017). Variável independente: estágio do pipeline. Variáveis dependentes: average accuracy, word accuracy, tempo. Análise global (222) + pareada (206).</div>
+        </div>
+        <div class="mcard top-navy">
+          <div class="mc-label">Dataset</div>
+          <div class="mc-title">222 Imagens de Documentos Reais</div>
+          <div class="mc-body">Imagens capturadas em campo com câmera do Raspberry Pi. <strong>Ground truth</strong> transcrito manualmente por único anotador. 16 imagens sem retorno do gpt-4.1-mini (modo batch) → análise pareada: <strong>206 pares</strong>. Tesseract PSM 3 / OEM 3.</div>
+        </div>
+        <div class="mcard top-green">
+          <div class="mc-label">Organização Metodológica</div>
+          <div class="mc-title">Ciclo PDCA (WERKEMA, 2012)</div>
+          <div class="mc-body"><strong>Plan:</strong> problema e hipótese. <strong>Do:</strong> implementação da arquitetura e pipeline. <strong>Check:</strong> execução do benchmark (222 imgs × 5 métodos). <strong>Act:</strong> análise estatística e conclusões. Utilizado como <em>organização retrospectiva do relato</em>.</div>
+        </div>
+        <div class="mcard top-steel">
+          <div class="mc-label">Ambiente Técnico</div>
+          <div class="mc-title">Stack de Desenvolvimento e Teste</div>
+          <div class="mc-body"><strong>Cliente:</strong> Raspberry Pi 4 + wxPython.<br><strong>Servidor:</strong> Flask (Python 3), Tesseract 5 (LSTM), OpenCV, Pillow.<br><strong>Fallback:</strong> OpenAI gpt-4.1-mini, modo batch.<br><strong>Persistência:</strong> SQLite (books, jobs, pages).<br><strong>Análise:</strong> SciPy (Wilcoxon), Pandas.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 8 — ANÁLISE: ACURÁCIA (5 MÉTODOS)
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-7" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">08</span><div class="sh-sep"></div>
+      <span class="sh-title">Análise dos Dados</span>
+      <span class="sh-tag">Average Accuracy · 5 Métodos</span>
+    </div>
+    <div class="sb" style="gap:10px;">
+      <div class="chart-label">Average Accuracy por Estágio do Pipeline (Tabela 4.2 / 5.1)</div>
+
+      <div style="flex:1;">
+        <div class="bar-row">
+          <div class="bar-method">old</div>
+          <div class="bar-track"><div class="bar-fill f-steel" data-target="57.65%" style="--bw:0%"><span class="bar-val">57,65%</span></div></div>
+          <div class="bar-delta neutral">222 imgs <span class="badge-base" style="margin-left:4px;">baseline</span></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-method">simple</div>
+          <div class="bar-track"><div class="bar-fill f-simple" data-target="57.84%" style="--bw:0%"><span class="bar-val">57,84%</span></div></div>
+          <div class="bar-delta" style="font-size:10px;color:var(--text3);">+0,19 p.p.</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-method">advanced</div>
+          <div class="bar-track"><div class="bar-fill f-adv" data-target="53.63%" style="--bw:0%"><span class="bar-val">53,63%</span></div></div>
+          <div class="bar-delta neg">−4,02 p.p.</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-method">enhanced</div>
+          <div class="bar-track"><div class="bar-fill f-enh" data-target="34.93%" style="--bw:0%"><span class="bar-val">34,93%</span></div></div>
+          <div class="bar-delta neg">−22,72 p.p. <span class="badge-worst" style="margin-left:4px;">pior</span></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-method">openai</div>
+          <div class="bar-track"><div class="bar-fill f-gold" data-target="63.64%" style="--bw:0%"><span class="bar-val">63,64%</span></div></div>
+          <div class="bar-delta">▲ melhor <span class="badge-best" style="margin-left:4px;">206 imgs</span></div>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-val gold">+5,53 p.p.</div>
+          <div class="stat-desc">Ganho pareado<br>(openai 63,64% vs old 58,11%)</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val green">+9,51%</div>
+          <div class="stat-desc">Ganho relativo<br>percentual</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" style="color:var(--red);font-size:16px;">−22,72 p.p.</div>
+          <div class="stat-desc">Enhanced (pré-proc. excessivo)<br>pior que o baseline</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" style="font-size:16px;">+3,996 s</div>
+          <div class="stat-desc">Custo temporal médio<br>openai vs old</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 9 — ANÁLISE: WORD ACCURACY + ESTATÍSTICA
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide" id="slide-8" style="display:flex;flex-direction:column;">
+    <div class="sh">
+      <span class="sh-num">09</span><div class="sh-sep"></div>
+      <span class="sh-title">Análise dos Dados</span>
+      <span class="sh-tag">Word Accuracy · Significância · Estratificação</span>
+    </div>
+    <div class="sb" style="gap:10px;">
+
+      <div class="chart-label">Word Accuracy — Comparativo Pareado (206 imagens)</div>
+      <div>
+        <div class="bar-row">
+          <div class="bar-method">old (pareado)</div>
+          <div class="bar-track"><div class="bar-fill f-steel" data-target="74.82%" style="--bw:0%"><span class="bar-val">74,82%</span></div></div>
+          <div class="bar-delta neutral">206 imgs</div>
+        </div>
+        <div class="bar-row" style="margin-bottom:0;">
+          <div class="bar-method">openai</div>
+          <div class="bar-track"><div class="bar-fill f-green" data-target="90.92%" style="--bw:0%"><span class="bar-val">90,92%</span></div></div>
+          <div class="bar-delta">▲ +16,09 p.p.</div>
+        </div>
+      </div>
+
+      <div class="sig-bar">
+        <div class="sig-item">
+          <div class="sig-val">p &lt; 0,001</div>
+          <div class="sig-desc">Wilcoxon (W=18.273)<br>unilateral</div>
+        </div>
+        <div class="sig-item">
+          <div class="sig-val">r = 0,62</div>
+          <div class="sig-desc">Tamanho de efeito<br><em>efeito grande</em></div>
+        </div>
+        <div class="sig-item">
+          <div class="sig-val sm">σ old = 10,77</div>
+          <div class="sig-desc">Desvio padrão<br>baseline (p.p.)</div>
+        </div>
+        <div class="sig-item">
+          <div class="sig-val sm">σ openai = 7,10</div>
+          <div class="sig-desc">Desvio padrão<br>multimodal (p.p.)</div>
+        </div>
+        <div class="sig-item">
+          <div class="sig-val sm">+14,06 p.p.</div>
+          <div class="sig-desc">Ganho em imagens<br>difíceis (tercil inf.)</div>
+        </div>
+      </div>
+
+      <!-- Análise estratificada -->
+      <div style="background:var(--paper);border:1px solid #e4dfd5;border-radius:9px;padding:12px 16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Análise Estratificada por Tercil de Dificuldade (n=206 pares)</div>
+        <table class="method-table">
+          <thead>
+            <tr><th>Faixa</th><th>n</th><th>Média old (%)</th><th>Média openai (%)</th><th>Ganho (p.p.)</th></tr>
+          </thead>
+          <tbody>
+            <tr class="worst"><td>Difíceis — tercil inferior</td><td class="mono">68</td><td class="mono">48,00</td><td class="mono">62,06</td><td class="mono" style="color:var(--green);font-weight:700;">+14,06</td></tr>
+            <tr><td>Medianas — tercil central</td><td class="mono">68</td><td class="mono">61,71</td><td class="mono">64,41</td><td class="mono">+2,70</td></tr>
+            <tr class="best"><td>Fáceis — tercil superior</td><td class="mono">70</td><td class="mono">64,44</td><td class="mono">64,42</td><td class="mono" style="color:var(--text3);">−0,02</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       SLIDE 10 — CONSIDERAÇÕES FINAIS
+  ════════════════════════════════════════════════════════════ -->
+  <div class="slide s10" id="slide-9">
+    <div class="s10-content">
+      <div>
+        <h2 class="s10-title">Considerações Finais</h2>
+        <div class="s10-rule"></div>
+      </div>
+      <div class="confirm">
+        <span class="confirm-icon">✅</span>
+        <p class="confirm-text">
+          <strong>Hipótese H₁ confirmada</strong> — ganho de <strong>+5,53 p.p.</strong> em acurácia e <strong>+16,09 p.p.</strong> em word accuracy, com p &lt; 0,001 (Wilcoxon) e r = 0,62 (efeito grande). Latência adicional de <strong>+3,996 s</strong> — abaixo do limiar de 15 s.
+        </p>
+      </div>
+      <div class="s10-cols">
+        <div>
+          <div class="s10-col-title">Contribuições</div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text"><strong style="color:rgba(255,255,255,.75);">Técnica:</strong> arquitetura cliente-servidor REST com fallback seletivo por quality_score</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text"><strong style="color:rgba(255,255,255,.75);">Assistiva:</strong> word accuracy de 90,92% vs 73,40% — menor esforço cognitivo na síntese de voz</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text"><strong style="color:rgba(255,255,255,.75);">Acadêmica:</strong> benchmark rastreável (222 imgs, JSON/CSV) com teste de significância</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text"><strong style="color:rgba(255,255,255,.75);">ADS:</strong> API REST, SQLite (books/jobs/pages), concorrência, análise quantitativa</div>
+          </div>
+        </div>
+        <div>
+          <div class="s10-col-title">Limitações</div>
+          <div class="s10-item"><div class="s10-dot" style="background:rgba(255,255,255,.3);"></div>
+            <div class="s10-text">222 imagens de páginas de livros impressos — sem manuscritos, formulários ou tabelas</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot" style="background:rgba(255,255,255,.3);"></div>
+            <div class="s10-text">16 imagens sem retorno do gpt-4.1-mini (falha de lote) — análise pareada reduzida a 206</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot" style="background:rgba(255,255,255,.3);"></div>
+            <div class="s10-text">Ground truth produzido por anotador único — sem cálculo de concordância</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot" style="background:rgba(255,255,255,.3);"></div>
+            <div class="s10-text">Sem avaliação com usuários finais (DV) — análise exclusivamente quantitativa</div>
+          </div>
+        </div>
+        <div>
+          <div class="s10-col-title">Trabalhos Futuros</div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text">Benchmark com diversidade: manuscritos, formulários, tabelas, outros idiomas</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text">Fallback multinível: Tesseract → OCR remoto → multimodal, com custo financeiro monitorado</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text">Estudo com usuários finais (DV) para medir impacto em usabilidade e compreensão de TTS</div>
+          </div>
+          <div class="s10-item"><div class="s10-dot"></div>
+            <div class="s10-text">Benchmark com repetições múltiplas + dupla anotação para estimativa de variabilidade</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /viewport -->
+ </div><!-- /scaler -->
+</div><!-- /stage -->
+
+<div class="controls">
+  <button class="btn" id="bPrev" onclick="nav(-1)" title="Anterior (←)">&#8592;</button>
+  <div class="prog-track"><div class="prog-fill" id="pf"></div></div>
+  <div id="ctr" class="ctr">1 / 10</div>
+  <button class="btn" id="bNext" onclick="nav(1)" title="Próximo (→)">&#8594;</button>
+  <span class="hint">← → para navegar · Espaço = avançar</span>
+</div>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total  = slides.length;
+  let cur = 0;
+
+  function scale() {
+    const s = Math.min(window.innerWidth / 960, (window.innerHeight - 52) / 540) * 0.97;
+    const sc = document.getElementById('scaler');
+    sc.style.transform = `scale(${s})`;
+    sc.style.width  = '960px';
+    sc.style.height = '540px';
+  }
+  scale();
+  window.addEventListener('resize', scale);
+
+  function animateBars(el) {
+    el.querySelectorAll('.bar-fill[data-target]').forEach(b => {
+      b.style.setProperty('--bw', '0%');
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        b.style.setProperty('--bw', b.dataset.target);
+      }));
+    });
+  }
+  function resetBars(el) {
+    el.querySelectorAll('.bar-fill[data-target]').forEach(b => b.style.setProperty('--bw', '0%'));
+  }
+
+  function nav(dir) {
+    const prev = cur;
+    cur = Math.max(0, Math.min(total - 1, cur + dir));
+    if (cur === prev) return;
+    slides[prev].classList.remove('active');
+    slides[prev].classList.add('out');
+    resetBars(slides[prev]);
+    const p = slides[prev];
+    setTimeout(() => p.classList.remove('out'), 500);
+    slides[cur].classList.add('active');
+    animateBars(slides[cur]);
+    updateUI();
+  }
+  window.nav = nav;
+
+  function updateUI() {
+    document.getElementById('ctr').textContent = `${cur + 1} / ${total}`;
+    document.getElementById('pf').style.width  = `${((cur + 1) / total) * 100}%`;
+    document.getElementById('bPrev').disabled  = cur === 0;
+    document.getElementById('bNext').disabled  = cur === total - 1;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); nav(1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key))         { e.preventDefault(); nav(-1); }
+  });
+
+  updateUI();
+  animateBars(slides[0]);
+})();
+</script>
+</body>
+</html>
