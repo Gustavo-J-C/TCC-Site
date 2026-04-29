@@ -17,7 +17,8 @@
   --white: #fff;    --green: #1f8c4e; --steel: #7a96b8;
   --red:   #c0392b;
 }
-html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-family:'Crimson Pro',Georgia,serif; }
+html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-family:'Crimson Pro',Georgia,serif;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; }
 
 /* ── Stage / Scale ── */
 .stage { position:fixed; inset:0 0 52px 0; display:flex; align-items:center; justify-content:center; }
@@ -27,9 +28,11 @@ html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-
 
 /* ── Slides ── */
 .slide { position:absolute; inset:0; opacity:0; pointer-events:none; transform:translateY(16px);
-  transition:opacity .42s ease, transform .42s ease; }
+  transition:opacity .42s ease, transform .42s ease;
+  backface-visibility:hidden; -webkit-backface-visibility:hidden; }
 .slide.active { opacity:1; pointer-events:all; transform:translateY(0); }
 .slide.out    { opacity:0; transform:translateY(-16px); }
+.slide.settled { transform:none; }
 
 /* ── Controls ── */
 .controls { position:fixed; bottom:0; left:0; right:0; height:52px;
@@ -287,12 +290,12 @@ html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-
         <div class="card b-navy">
           <div class="c-icon">🖥️</div>
           <div class="c-title">Sistema M-Reader</div>
-          <div class="c-body">App assistivo de baixo custo para leitura de documentos impressos (cardápios, livros) via câmera. Plataforma cliente: <strong>Raspberry Pi</strong> com wxPython. Transição arquitetural: de processamento local para <strong>cliente-servidor</strong> com servidor Flask remoto.</div>
+          <div class="c-body">App assistivo de baixo custo para leitura de documentos impressos (cardápios, livros, folhetos) via câmera. Plataforma cliente: <strong>Raspberry Pi</strong> com wxPython. Transição arquitetural: de processamento local para <strong>cliente-servidor</strong> com servidor Flask remoto.</div>
         </div>
         <div class="card b-steel">
           <div class="c-icon">🔍</div>
           <div class="c-title">OCR — Reconhecimento Óptico</div>
-          <div class="c-body">Técnicas que convertem imagens com texto em dados processáveis. Evolução: regras → modelos estatísticos → redes neurais e multimodais (SUBRAMANI et al., 2021). Desafios em cardápios: fontes ornamentais, iluminação irregular, ângulo e foco.</div>
+          <div class="c-body">Técnicas que convertem imagens com texto em dados processáveis. Evolução: regras → modelos estatísticos → redes neurais e multimodais (SUBRAMANI et al., 2021). Desafios: fontes ornamentais, iluminação irregular, ângulo e foco.</div>
         </div>
       </div>
       <div class="g2">
@@ -365,7 +368,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-
         </div>
         <div class="issue">
           <span class="issue-icon">📉</span>
-          <div class="issue-text"><strong>Acurácia limitada:</strong> Tesseract local (método <em>old</em>) atingia apenas <strong>57,65%</strong> de average accuracy em imagens reais de cardápios.</div>
+          <div class="issue-text"><strong>Acurácia limitada:</strong> Tesseract local (método <em>old</em>) atingia apenas <strong>57,65%</strong> de average accuracy em imagens reais.</div>
         </div>
         <div class="issue">
           <span class="issue-icon">💡</span>
@@ -727,13 +730,17 @@ html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-
     const prev = cur;
     cur = Math.max(0, Math.min(total - 1, cur + dir));
     if (cur === prev) return;
-    slides[prev].classList.remove('active');
+    slides[prev].classList.remove('active', 'settled');
     slides[prev].classList.add('out');
     resetBars(slides[prev]);
     const p = slides[prev];
     setTimeout(() => p.classList.remove('out'), 500);
-    slides[cur].classList.add('active');
-    animateBars(slides[cur]);
+    const next = slides[cur];
+    next.classList.add('active');
+    next.addEventListener('transitionend', () => {
+      if (next.classList.contains('active')) next.classList.add('settled');
+    }, { once: true });
+    animateBars(next);
     updateUI();
   }
   window.nav = nav;
@@ -752,6 +759,7 @@ html, body { width:100%; height:100%; overflow:hidden; background:#05090f; font-
 
   updateUI();
   animateBars(slides[0]);
+  slides[0].classList.add('settled');
 })();
 </script>
 </body>
